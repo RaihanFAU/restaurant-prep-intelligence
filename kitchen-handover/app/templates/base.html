@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>{{ t.app_name }}{% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <header class="app-header">
+        <a href="/" class="app-name">{{ t.app_name }}</a>
+        {% if worker %}
+            <span class="worker-badge">{{ worker.display_name }}
+                · <a href="/worker/select?next={{ request.url.path }}">{{ t.change_worker }}</a>
+            </span>
+        {% endif %}
+    </header>
+    <main class="app-main">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

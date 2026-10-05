@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %} · {{ station.name }}{% endblock %}
+{% block content %}
+<h1>{{ station.name }}</h1>
+
+{% if not worker %}
+<p class="breadcrumb"><a href="/worker/select?next=/stations/{{ station.id }}">{{ t.choose_worker_title }}</a></p>
+{% endif %}
+
+{% include "_task_list.html" %}
+
+{% if sections_with_products %}
+<h2>{{ t.sections_heading }}</h2>
+<div class="card-grid">
+    {% for entry in sections_with_products %}
+    <div class="section-card" style="display:block;">
+        <strong>{{ entry.section.name }}</strong>
+        {% for product in entry.products %}
+        <div><a href="/products/{{ product.id }}">{{ product.name_de }}</a></div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if direct_products %}
+<h2>{{ t.products_heading }}</h2>
+<div class="card-grid">
+    {% for product in direct_products %}
+    <a class="product-row" href="/products/{{ product.id }}">{{ product.name_de }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

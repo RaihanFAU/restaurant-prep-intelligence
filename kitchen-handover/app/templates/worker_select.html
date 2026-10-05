@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %} · {{ t.choose_worker_title }}{% endblock %}
+{% block content %}
+<h1>{{ t.choose_worker_title }}</h1>
+<p>{{ t.choose_worker_prompt }}</p>
+
+<form method="post" action="/worker/select">
+    <input type="hidden" name="next" value="{{ next }}">
+
+    {% for w in workers %}
+    <button class="worker-option" type="submit" name="worker_id" value="{{ w.id }}">{{ w.display_name }}</button>
+    {% endfor %}
+
+    <input type="text" name="new_name" placeholder="{{ t.new_worker_placeholder }}">
+    <button class="big-button primary" type="submit">{{ t.continue_button }}</button>
+</form>
+{% endblock %}

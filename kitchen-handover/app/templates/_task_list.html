@@ -1,0 +1,27 @@
+{% set overdue_items = items | selectattr("is_overdue") | list %}
+{% set today_items = items | rejectattr("is_overdue") | list %}
+<div id="task-list-{{ station_id }}">
+    {% if flash_message %}
+    <div class="flash">{{ flash_message }}</div>
+    {% endif %}
+
+    {% if overdue_items %}
+    <div class="task-list-section">
+        <h2>{{ t.overdue_heading }}</h2>
+        {% for item in overdue_items %}
+            {% include "_task_row.html" %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="task-list-section">
+        <h2>{{ t.today_heading }}</h2>
+        {% if today_items %}
+            {% for item in today_items %}
+                {% include "_task_row.html" %}
+            {% endfor %}
+        {% else %}
+        <p class="empty-state">{{ t.no_active_tasks }}</p>
+        {% endif %}
+    </div>
+</div>

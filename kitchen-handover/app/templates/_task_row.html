@@ -1,0 +1,16 @@
+<div class="task-item {{ 'overdue' if item.is_overdue else 'today' }}">
+    <span>
+        <a href="/products/{{ item.task.product.id }}">{{ item.task.product.name_de }}</a>
+        <span class="due-note">{{ t.due_yesterday_or_earlier if item.is_overdue else t.due_today }}</span>
+    </span>
+    {% if worker %}
+    <button class="done-button"
+            hx-post="/tasks/{{ item.task.id }}/complete?worker_id={{ worker.id }}"
+            hx-target="#task-list-{{ station_id }}"
+            hx-swap="outerHTML">
+        {{ t.done_button }}
+    </button>
+    {% else %}
+    <a class="done-button" href="/worker/select?next=/stations/{{ station_id }}">{{ t.done_button }}</a>
+    {% endif %}
+</div>

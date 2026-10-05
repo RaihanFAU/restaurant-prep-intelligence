@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %} · {{ t.home_title }}{% endblock %}
+{% block content %}
+<h1>{{ t.home_title }}</h1>
+
+{% if not worker %}
+<p class="breadcrumb"><a href="/worker/select?next=/">{{ t.choose_worker_title }}</a></p>
+{% endif %}
+
+<div class="card-grid">
+    {% for row in station_rows %}
+    <a class="station-card" href="/stations/{{ row.station.id }}">
+        <span>{{ row.station.name }}</span>
+        <span class="count">{{ row.active_count }} {{ t.items_to_prepare }}</span>
+    </a>
+    {% endfor %}
+</div>
+{% endblock %}
