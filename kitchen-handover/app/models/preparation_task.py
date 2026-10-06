@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Date, Enum as SAEnum, ForeignKey, Index, Text, func, text
+from sqlalchemy import Boolean, DateTime, Date, Enum as SAEnum, ForeignKey, Index, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import TaskStatus
+from app.core.enums import TaskPriority, TaskStatus
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -48,6 +48,19 @@ class PreparationTask(Base):
         default=TaskStatus.TO_PREPARE,
         nullable=False,
     )
+
+    # Simple manual priority (NOT the long-term weighted-scoring engine).
+    # PREPARE TOMORROW defaults new tasks to URGENT (set explicitly by the
+    # service, not relied on as just a column default); an admin may change
+    # it. is_pinned is a separate, orthogonal "show this first no matter
+    # what" flag — never folded into the priority enum as a 4th value
+    # (spec: don't store PINNED as both a priority level and a boolean).
+    priority: Mapped[TaskPriority] = mapped_column(
+        SAEnum(TaskPriority, native_enum=False, length=20, create_constraint=True, name="ck_task_priority"),
+        default=TaskPriority.URGENT,
+        nullable=False,
+    )
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     created_by_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False)
