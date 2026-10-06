@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_worker
+from app.core.auth import require_user
 from app.core.i18n import TEXTS
 from app.db.session import get_db
+from app.models import Worker
 from app.repositories import prepared_product_repository, section_repository, station_repository
 from app.services.errors import ProductNotFoundError, StationNotFoundError
 from app.services.preparation_task_service import PreparationTaskService
@@ -14,23 +15,24 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/")
-def home(request: Request, db: Session = Depends(get_db)):
+def home(request: Request, db: Session = Depends(get_db), current_user: Worker = Depends(require_user)):
     service = PreparationTaskService(db)
     stations = station_repository.list_active_stations(db)
     station_rows = [
         {"station": station, "active_count": len(service.get_station_tasks_today(station.id))}
         for station in stations
     ]
-    worker = get_current_worker(request, db)
     return templates.TemplateResponse(
         request,
         "home.html",
-        {"t": TEXTS, "station_rows": station_rows, "worker": worker},
+        {"t": TEXTS, "station_rows": station_rows, "current_user": current_user},
     )
 
 
 @router.get("/stations/{station_id}")
-def station_page(station_id: int, request: Request, db: Session = Depends(get_db)):
+def station_page(
+    station_id: int, request: Request, db: Session = Depends(get_db), current_user: Worker = Depends(require_user)
+):
     station = station_repository.get_station(db, station_id)
     if station is None:
         raise StationNotFoundError(station_id)
@@ -45,7 +47,6 @@ def station_page(station_id: int, request: Request, db: Session = Depends(get_db
     ]
     direct_products = prepared_product_repository.list_products_for_station(db, station_id)
 
-    worker = get_current_worker(request, db)
     return templates.TemplateResponse(
         request,
         "station.html",
@@ -56,20 +57,21 @@ def station_page(station_id: int, request: Request, db: Session = Depends(get_db
             "items": items,
             "sections_with_products": sections_with_products,
             "direct_products": direct_products,
-            "worker": worker,
+            "current_user": current_user,
         },
     )
 
 
 @router.get("/products/{product_id}")
-def product_page(product_id: int, request: Request, db: Session = Depends(get_db)):
+def product_page(
+    product_id: int, request: Request, db: Session = Depends(get_db), current_user: Worker = Depends(require_user)
+):
     product = prepared_product_repository.get_product(db, product_id)
     if product is None:
         raise ProductNotFoundError(product_id)
 
-    worker = get_current_worker(request, db)
     return templates.TemplateResponse(
         request,
         "product.html",
-        {"t": TEXTS, "product": product, "worker": worker},
+        {"t": TEXTS, "product": product, "current_user": current_user},
     )
