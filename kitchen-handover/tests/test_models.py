@@ -31,7 +31,11 @@ YESTERDAY = TODAY - timedelta(days=1)
 
 
 def make_worker(db: Session, name: str = "Michael") -> Worker:
-    worker = Worker(display_name=name)
+    # password_hash is a placeholder here, not a real Argon2 hash — these
+    # are model/constraint tests, not auth tests (see test_auth.py for
+    # real password hashing/verification coverage). Only NOT NULL +
+    # "some string" matters at this layer.
+    worker = Worker(display_name=name, email=f"{name.lower()}@example.test", password_hash="x")
     db.add(worker)
     db.commit()
     return worker
@@ -143,10 +147,19 @@ def test_storage_location_name_must_be_unique(db_session: Session):
 
 
 def test_worker_display_name_must_be_unique(db_session: Session):
-    db_session.add(Worker(display_name="Michael"))
+    db_session.add(Worker(display_name="Michael", email="michael1@example.test", password_hash="x"))
     db_session.commit()
 
-    db_session.add(Worker(display_name="Michael"))
+    db_session.add(Worker(display_name="Michael", email="michael2@example.test", password_hash="x"))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+
+def test_worker_email_must_be_unique(db_session: Session):
+    db_session.add(Worker(display_name="Michael", email="same@example.test", password_hash="x"))
+    db_session.commit()
+
+    db_session.add(Worker(display_name="Someone Else", email="same@example.test", password_hash="x"))
     with pytest.raises(IntegrityError):
         db_session.commit()
 

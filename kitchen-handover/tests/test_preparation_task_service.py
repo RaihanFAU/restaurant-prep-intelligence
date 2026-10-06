@@ -23,7 +23,9 @@ YESTERDAY = TODAY - timedelta(days=1)
 
 @pytest.fixture()
 def worker(db_session: Session) -> Worker:
-    w = Worker(display_name="Michael")
+    # Placeholder password_hash — these are PreparationTaskService tests,
+    # not auth tests (see test_auth.py), so a real Argon2 hash isn't needed.
+    w = Worker(display_name="Michael", email="michael@example.test", password_hash="x")
     db_session.add(w)
     db_session.commit()
     return w
