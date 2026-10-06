@@ -7,6 +7,13 @@ Safe to re-run — every row is "get or create by its natural key", so
 running this twice never creates duplicates. Station/section/product names
 here are demo data only, not verified restaurant truth (see
 docs/mvp/kitchen-handover.md §28/§6) — edit the CSVs freely.
+
+NOTE: this script no longer seeds demo Worker accounts. The old
+"Michael"/"Anna" no-password placeholder workers were the free
+worker-selection mechanism removed when real login was added — a Worker
+now needs an email + password, which isn't something to fabricate in a
+seed script. Create the first real account with `python
+scripts/create_admin.py`, then create everyone else through /admin/users.
 """
 
 import csv
@@ -18,9 +25,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 DATA_DIR = PROJECT_ROOT / "data"
 
 from app.db.session import SessionLocal  # noqa: E402
-from app.models import PreparedProduct, Section, Station, Worker  # noqa: E402
-
-DEMO_WORKERS = ["Michael", "Anna"]
+from app.models import PreparedProduct, Section, Station  # noqa: E402
 
 
 def get_or_create_station(db, name: str) -> Station:
@@ -58,16 +63,6 @@ def get_or_create_product(db, station: Station, section: Section | None, name_de
     return product
 
 
-def get_or_create_worker(db, display_name: str) -> Worker:
-    worker = db.query(Worker).filter_by(display_name=display_name).first()
-    if worker is None:
-        worker = Worker(display_name=display_name)
-        db.add(worker)
-        db.commit()
-        print(f"  + worker {display_name!r}")
-    return worker
-
-
 def main() -> None:
     db = SessionLocal()
     try:
@@ -93,10 +88,6 @@ def main() -> None:
                 section_name = row["section_name"].strip()
                 section = sections[(station.name, section_name)] if section_name else None
                 get_or_create_product(db, station, section, row["name_de"])
-
-        print("Workers:")
-        for name in DEMO_WORKERS:
-            get_or_create_worker(db, name)
 
         print("Seed complete.")
     finally:
