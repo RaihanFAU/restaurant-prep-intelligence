@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.enums import TaskStatus
+from app.core.enums import TaskPriority, TaskStatus
 from app.models import PreparationTask
 from app.repositories import (
     prepared_product_repository,
@@ -28,6 +28,10 @@ from app.services.errors import (
     TaskNotFoundError,
     WorkerNotFoundError,
 )
+
+# Lower rank sorts first. Display/sort-only concept — not a model concern,
+# so it lives here rather than on the enum itself.
+_PRIORITY_RANK = {TaskPriority.URGENT: 0, TaskPriority.HIGH: 1, TaskPriority.NORMAL: 2}
 
 
 @dataclass
@@ -85,7 +89,15 @@ class PreparationTaskService:
 
         try:
             task = preparation_task_repository.create_task(
-                self.db, product_id=product_id, due_date=due_date, created_by_id=worker_id
+                self.db,
+                product_id=product_id,
+                due_date=due_date,
+                created_by_id=worker_id,
+                # A product only gets "prepare tomorrow"'d because someone on
+                # the floor noticed it's finished — that's inherently urgent,
+                # not a judgment call left to a column default. An admin can
+                # still downgrade it afterward via /admin/tasks.
+                priority=TaskPriority.URGENT,
             )
         except IntegrityError:
             # Two near-simultaneous taps both passed the check above before
@@ -101,8 +113,19 @@ class PreparationTaskService:
         return PrepareTomorrowResult(task=task, already_marked=False)
 
     def get_station_tasks_today(self, station_id: int, today: date | None = None) -> list[TaskListItem]:
-        """status = TO_PREPARE AND due_date <= today, overdue first, then
-        today's tasks, then alphabetical by product name."""
+        """status = TO_PREPARE AND due_date <= today (intentionally includes
+        overdue tasks), ordered:
+
+            1. pinned tasks first (always — a pin overrides every other
+               criterion below, including priority and overdue-ness)
+            2. overdue before today's
+            3. priority: URGENT, then HIGH, then NORMAL
+            4. product name, alphabetically, as a stable final tiebreaker
+
+        This exact order is asserted in tests/test_preparation_task_service.py
+        (see test_pinned_task_sorts_before_everything_else and friends) —
+        change the sort key there too if this ordering ever changes.
+        """
         today = today or date.today()
 
         station = station_repository.get_station(self.db, station_id)
@@ -111,8 +134,67 @@ class PreparationTaskService:
 
         tasks = preparation_task_repository.get_station_tasks_today(self.db, station_id, today)
         items = [TaskListItem(task=t, is_overdue=t.due_date < today) for t in tasks]
-        items.sort(key=lambda item: (0 if item.is_overdue else 1, item.task.product.name_de.lower()))
+        items.sort(
+            key=lambda item: (
+                0 if item.task.is_pinned else 1,
+                0 if item.is_overdue else 1,
+                _PRIORITY_RANK[item.task.priority],
+                item.task.product.name_de.lower(),
+            )
+        )
         return items
+
+    def set_priority(self, task_id: int, priority: TaskPriority) -> PreparationTask:
+        """Admin-only in practice (enforced at the route layer, not here —
+        this service has no concept of roles)."""
+        task = preparation_task_repository.get_task(self.db, task_id)
+        if task is None:
+            raise TaskNotFoundError(task_id)
+        task.priority = priority
+        return preparation_task_repository.save(self.db, task)
+
+    def set_pinned(self, task_id: int, is_pinned: bool) -> PreparationTask:
+        task = preparation_task_repository.get_task(self.db, task_id)
+        if task is None:
+            raise TaskNotFoundError(task_id)
+        task.is_pinned = is_pinned
+        return preparation_task_repository.save(self.db, task)
+
+    def create_manual_task(
+        self, product_id: int, due_date: date, priority: TaskPriority, created_by_id: int
+    ) -> PrepareTomorrowResult:
+        """Admin manual task creation (/admin/tasks) — same duplicate-guard
+        and validation rules as prepare_tomorrow, but the caller picks the
+        due date and priority explicitly instead of them being implied by
+        "tomorrow" / "urgent"."""
+        product = prepared_product_repository.get_product(self.db, product_id)
+        if product is None:
+            raise ProductNotFoundError(product_id)
+        if not product.is_active:
+            raise InactiveProductError(product_id)
+
+        existing = preparation_task_repository.find_active_task(self.db, product_id, due_date)
+        if existing is not None:
+            return PrepareTomorrowResult(task=existing, already_marked=True)
+
+        try:
+            task = preparation_task_repository.create_task(
+                self.db, product_id=product_id, due_date=due_date, created_by_id=created_by_id, priority=priority
+            )
+        except IntegrityError:
+            self.db.rollback()
+            existing = preparation_task_repository.find_active_task(self.db, product_id, due_date)
+            if existing is None:  # pragma: no cover - should be unreachable
+                raise
+            return PrepareTomorrowResult(task=existing, already_marked=True)
+
+        return PrepareTomorrowResult(task=task, already_marked=False)
+
+    def list_all_tasks(self) -> list[PreparationTask]:
+        """Admin task list (/admin/tasks) — every task, unfiltered, unsorted
+        beyond newest-first (an admin reviewing/managing tasks wants to see
+        everything, not the worker-facing actionable subset)."""
+        return preparation_task_repository.list_all_tasks(self.db)
 
     def complete_task(self, task_id: int, worker_id: int, now: datetime | None = None) -> CompleteTaskResult:
         now = now or datetime.now()

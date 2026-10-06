@@ -3,7 +3,7 @@ from datetime import date, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.enums import TaskStatus
+from app.core.enums import TaskPriority, TaskStatus
 from app.models import PreparationTask, PreparedProduct
 
 
@@ -23,13 +23,35 @@ def find_active_task(db: Session, product_id: int, due_date: date) -> Preparatio
     return db.scalars(stmt).first()
 
 
-def create_task(db: Session, *, product_id: int, due_date: date, created_by_id: int) -> PreparationTask:
+def create_task(
+    db: Session, *, product_id: int, due_date: date, created_by_id: int, priority: TaskPriority
+) -> PreparationTask:
     task = PreparationTask(
         prepared_product_id=product_id,
         due_date=due_date,
         status=TaskStatus.TO_PREPARE,
         created_by_id=created_by_id,
+        priority=priority,
     )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def list_all_tasks(db: Session) -> list[PreparationTask]:
+    """Admin view (/admin/tasks) — every task, any status, any station,
+    newest first."""
+    stmt = (
+        select(PreparationTask)
+        .options(joinedload(PreparationTask.product), joinedload(PreparationTask.created_by), joinedload(PreparationTask.completed_by))
+        .order_by(PreparationTask.created_at.desc())
+    )
+    return list(db.scalars(stmt).unique())
+
+
+def save(db: Session, task: PreparationTask) -> PreparationTask:
+    """Persist in-place edits (priority, is_pinned) made by the caller."""
     db.add(task)
     db.commit()
     db.refresh(task)
