@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %} · {{ t.admin_tasks_card }}{% endblock %}
+{% block content %}
+<h1>{{ t.admin_tasks_card }}</h1>
+{% include "admin/_nav.html" %}
+
+{% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
+
+<table class="admin-table">
+    <thead>
+        <tr>
+            <th>{{ t.product_name_de_label }}</th>
+            <th>{{ t.station_label }}</th>
+            <th>{{ t.due_date_label }}</th>
+            <th>Status</th>
+            <th>{{ t.priority_label }}</th>
+            <th></th>
+            <th>{{ t.created_by_label }}</th>
+            <th>{{ t.completed_by_label }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for task in tasks %}
+        <tr>
+            <td>{{ task.product.name_de }}</td>
+            <td>{{ task.product.station.name }}</td>
+            <td>
+                {{ task.due_date }}
+                {% if task.status.value == "TO_PREPARE" %}
+                    {% if task.due_date < today %}<span class="badge inactive">{{ t.overdue_heading }}</span>
+                    {% elif task.due_date == today %}<span class="badge active">{{ t.today_heading }}</span>
+                    {% else %}<span class="badge">—</span>{% endif %}
+                {% endif %}
+            </td>
+            <td>{{ task.status.value }}</td>
+            <td>
+                {% if task.is_pinned %}<span class="priority-tag priority-pinned">{{ t.pinned_label }}</span>{% endif %}
+                <form class="inline-form" method="post" action="/admin/tasks/{{ task.id }}/priority">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                    <select name="priority" onchange="this.form.submit()" style="width:auto; display:inline-block; margin:0;">
+                        <option value="URGENT" {{ 'selected' if task.priority.value == 'URGENT' }}>URGENT</option>
+                        <option value="HIGH" {{ 'selected' if task.priority.value == 'HIGH' }}>HIGH</option>
+                        <option value="NORMAL" {{ 'selected' if task.priority.value == 'NORMAL' }}>NORMAL</option>
+                    </select>
+                </form>
+            </td>
+            <td>
+                {% if task.is_pinned %}
+                <form class="inline-form" method="post" action="/admin/tasks/{{ task.id }}/unpin">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                    <button class="small-button" type="submit">{{ t.unpin_button }}</button>
+                </form>
+                {% else %}
+                <form class="inline-form" method="post" action="/admin/tasks/{{ task.id }}/pin">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                    <button class="small-button" type="submit">{{ t.pin_button }}</button>
+                </form>
+                {% endif %}
+            </td>
+            <td>{{ task.created_by.display_name }}</td>
+            <td>{{ task.completed_by.display_name if task.completed_by else '—' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="form-card">
+    <form method="post" action="/admin/tasks">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <label for="product_id">{{ t.product_name_de_label }}</label>
+        <select id="product_id" name="product_id" required>
+            {% for product in products %}
+            <option value="{{ product.id }}">{{ product.station.name }} / {{ product.name_de }}</option>
+            {% endfor %}
+        </select>
+        <label for="due_date">{{ t.due_date_label }}</label>
+        <input type="date" id="due_date" name="due_date" required>
+        <label for="priority">{{ t.priority_label }}</label>
+        <select id="priority" name="priority">
+            <option value="NORMAL">NORMAL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="URGENT" selected>URGENT</option>
+        </select>
+        <button class="big-button primary" type="submit">{{ t.create_task_button }}</button>
+    </form>
+</div>
+{% endblock %}
