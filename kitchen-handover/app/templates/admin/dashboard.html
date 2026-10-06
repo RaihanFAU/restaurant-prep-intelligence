@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %} · {{ t.admin_dashboard_title }}{% endblock %}
+{% block content %}
+<h1>{{ t.admin_dashboard_title }}</h1>
+{% include "admin/_nav.html" %}
+
+<div class="card-grid">
+    <a class="station-card" href="/admin/products"><span>{{ t.admin_products_card }}</span></a>
+    <a class="station-card" href="/admin/stations"><span>{{ t.admin_stations_card }}</span></a>
+    <a class="station-card" href="/admin/sections"><span>{{ t.admin_sections_card }}</span></a>
+    <a class="station-card" href="/admin/users"><span>{{ t.admin_users_card }}</span></a>
+    <a class="station-card" href="/admin/tasks"><span>{{ t.admin_tasks_card }}</span></a>
+</div>
+{% endblock %}

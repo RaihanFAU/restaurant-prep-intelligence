@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %} · {{ product.name_de }}{% endblock %}
+{% block content %}
+<h1>{{ t.edit_button }}: {{ product.name_de }}</h1>
+{% include "admin/_nav.html" %}
+
+{% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
+
+<div class="form-card">
+    <form method="post" action="/admin/products/{{ product.id }}/edit">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <label for="name_de">{{ t.product_name_de_label }}</label>
+        <input type="text" id="name_de" name="name_de" value="{{ product.name_de }}" required>
+        <label for="name_en">{{ t.product_name_en_label }}</label>
+        <input type="text" id="name_en" name="name_en" value="{{ product.name_en or '' }}">
+        <label for="station_id">{{ t.station_label }}</label>
+        <select id="station_id" name="station_id" required>
+            {% for station in stations %}
+            <option value="{{ station.id }}" {{ 'selected' if station.id == product.station_id }}>{{ station.name }}{{ '' if station.is_active else ' (' ~ t.inactive_label ~ ')' }}</option>
+            {% endfor %}
+        </select>
+        <label for="section_id">{{ t.section_label }}</label>
+        <select id="section_id" name="section_id">
+            <option value="">{{ t.no_section_option }}</option>
+            {% for section in sections %}
+            <option value="{{ section.id }}" {{ 'selected' if section.id == product.section_id }}>{{ section.station.name }} / {{ section.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="big-button primary" type="submit">{{ t.save_button }}</button>
+    </form>
+</div>
+
+<a href="/admin/products">{{ t.back_link }}</a>
+{% endblock %}

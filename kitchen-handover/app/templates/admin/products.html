@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %} · {{ t.admin_products_card }}{% endblock %}
+{% block content %}
+<h1>{{ t.admin_products_card }}</h1>
+{% include "admin/_nav.html" %}
+
+{% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
+
+<form method="get" action="/admin/products">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t.search_placeholder }}">
+</form>
+
+<table class="admin-table">
+    <thead>
+        <tr><th>{{ t.product_name_de_label }}</th><th>{{ t.station_label }}</th><th>{{ t.section_label }}</th><th></th><th></th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for product in products %}
+        <tr>
+            <td>{{ product.name_de }}</td>
+            <td>{{ product.station.name }}</td>
+            <td>{{ product.section.name if product.section else '—' }}</td>
+            <td><span class="badge {{ 'active' if product.is_active else 'inactive' }}">{{ t.active_label if product.is_active else t.inactive_label }}</span></td>
+            <td><a class="small-button" href="/admin/products/{{ product.id }}/edit">{{ t.edit_button }}</a></td>
+            <td>
+                {% if product.is_active %}
+                <form class="inline-form" method="post" action="/admin/products/{{ product.id }}/deactivate">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                    <button class="small-button danger" type="submit">{{ t.deactivate_button }}</button>
+                </form>
+                {% else %}
+                <form class="inline-form" method="post" action="/admin/products/{{ product.id }}/activate">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                    <button class="small-button success" type="submit">{{ t.activate_button }}</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="form-card">
+    <form method="post" action="/admin/products">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <label for="name_de">{{ t.product_name_de_label }}</label>
+        <input type="text" id="name_de" name="name_de" required>
+        <label for="name_en">{{ t.product_name_en_label }}</label>
+        <input type="text" id="name_en" name="name_en">
+        <label for="station_id">{{ t.station_label }}</label>
+        <select id="station_id" name="station_id" required>
+            {% for station in stations %}
+            <option value="{{ station.id }}">{{ station.name }}{{ '' if station.is_active else ' (' ~ t.inactive_label ~ ')' }}</option>
+            {% endfor %}
+        </select>
+        <label for="section_id">{{ t.section_label }}</label>
+        <select id="section_id" name="section_id">
+            <option value="">{{ t.no_section_option }}</option>
+            {% for section in sections %}
+            <option value="{{ section.id }}">{{ section.station.name }} / {{ section.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="big-button primary" type="submit">{{ t.add_button }}</button>
+    </form>
+</div>
+{% endblock %}
