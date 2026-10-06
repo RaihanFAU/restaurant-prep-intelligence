@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %} · {{ worker.display_name }}{% endblock %}
+{% block content %}
+<h1>{{ worker.display_name }}</h1>
+{% include "admin/_nav.html" %}
+
+{% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
+
+<p>{{ t.email_label }}: {{ worker.email }}</p>
+<p><span class="badge {{ 'active' if worker.is_active else 'inactive' }}">{{ t.active_label if worker.is_active else t.inactive_label }}</span></p>
+
+<div class="form-card">
+    <form method="post" action="/admin/users/{{ worker.id }}/role">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <label for="role">{{ t.role_label }}</label>
+        <select id="role" name="role">
+            <option value="WORKER" {{ 'selected' if worker.role.value == 'WORKER' }}>WORKER</option>
+            <option value="ADMIN" {{ 'selected' if worker.role.value == 'ADMIN' }}>ADMIN</option>
+        </select>
+        <button class="big-button primary" type="submit">{{ t.save_button }}</button>
+    </form>
+</div>
+
+<div class="form-card">
+    {% if worker.is_active %}
+    <form method="post" action="/admin/users/{{ worker.id }}/deactivate">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <button class="big-button" style="background:var(--color-danger); color:white;" type="submit">{{ t.deactivate_button }}</button>
+    </form>
+    {% else %}
+    <form method="post" action="/admin/users/{{ worker.id }}/activate">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <button class="big-button" style="background:var(--color-done); color:white;" type="submit">{{ t.activate_button }}</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="form-card">
+    <form method="post" action="/admin/users/{{ worker.id }}/password">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <label for="new_password">{{ t.new_password_label }}</label>
+        <input type="password" id="new_password" name="new_password" required>
+        <button class="big-button primary" type="submit">{{ t.reset_password_button }}</button>
+    </form>
+</div>
+
+<a href="/admin/users">{{ t.back_link }}</a>
+{% endblock %}
