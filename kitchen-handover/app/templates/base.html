@@ -10,9 +10,15 @@
 <body>
     <header class="app-header">
         <a href="/" class="app-name">{{ t.app_name }}</a>
-        {% if worker %}
-            <span class="worker-badge">{{ worker.display_name }}
-                · <a href="/worker/select?next={{ request.url.path }}">{{ t.change_worker }}</a>
+        {% if current_user %}
+            <span class="worker-badge">
+                {{ t.logged_in_as }}: {{ current_user.display_name }}
+                {% if current_user.role.value == "ADMIN" %}· <a href="/admin">{{ t.admin_link }}</a>{% endif %}
+                ·
+                <form method="post" action="/logout" style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                    <button type="submit" class="link-button">{{ t.logout_button }}</button>
+                </form>
             </span>
         {% endif %}
     </header>

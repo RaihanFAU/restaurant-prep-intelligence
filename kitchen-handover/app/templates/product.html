@@ -7,19 +7,13 @@
     {% if product.section %} → {{ product.section.name }}{% endif %}
 </p>
 
-{% if worker %}
 <button class="big-button primary"
-        hx-post="/products/{{ product.id }}/prepare-tomorrow?worker_id={{ worker.id }}"
+        hx-post="/products/{{ product.id }}/prepare-tomorrow"
+        hx-headers='{"X-CSRF-Token": "{{ request.state.csrf_token }}"}'
         hx-target="#prepare-feedback"
         hx-swap="innerHTML">
     {{ t.prepare_tomorrow_button }}
 </button>
-{% else %}
-<a class="big-button primary" style="text-align:center; text-decoration:none;"
-   href="/worker/select?next=/products/{{ product.id }}">
-    {{ t.choose_worker_title }}
-</a>
-{% endif %}
 
 <div id="prepare-feedback"></div>
 {% endblock %}

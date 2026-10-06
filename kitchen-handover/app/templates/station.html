@@ -3,10 +3,6 @@
 {% block content %}
 <h1>{{ station.name }}</h1>
 
-{% if not worker %}
-<p class="breadcrumb"><a href="/worker/select?next=/stations/{{ station.id }}">{{ t.choose_worker_title }}</a></p>
-{% endif %}
-
 {% include "_task_list.html" %}
 
 {% if sections_with_products %}
