@@ -13,21 +13,30 @@ It solves exactly two problems for a real kitchen:
    is, so the next worker can search for it instead of checking every
    fridge/Kühlhaus.
 
-No quantities, forecasting, AI, recipes, or integrations — see the spec's
-"non-goals" section.
+No quantities, forecasting, AI, recipes, or integrations.
 
 ## Current status
 
-**Workflow 1 is complete and working end to end:**
+**Workflow 1, real authentication, role-based admin, and manual task
+priority are complete and working end to end:**
 
 ```
-PREPARE TOMORROW → ACTIVE TODAY/OVERDUE TASK LIST → COMPLETE TASK
+Login → Product → PREPARE TOMORROW → Today/Overdue task list → Complete
 ```
 
-Implemented: repositories, `PreparationTaskService`, Pydantic schemas, thin
-FastAPI routes, a mobile-first Jinja2 + HTMX UI (home → station → product),
-a no-auth worker-selection cookie, idempotent CSV-driven seed data, and 45
-passing tests (model, service, and route/integration level).
+- Real email+password login (Argon2-hashed passwords, signed session
+  cookie) — **replaces** the old "pick any worker's name" mechanism, which
+  let one worker complete tasks under another worker's name. The acting
+  worker is now always the authenticated session user; the server never
+  trusts a client-supplied worker id.
+- Two roles: `ADMIN`, `WORKER`. Admin routes are protected server-side
+  (a `WORKER` hitting `/admin` gets `403`, not just a hidden button).
+- `/admin` dashboard: manage prepared products, stations, sections, user
+  accounts, and task priority/pinning — no more editing CSVs or Python to
+  add a product.
+- Simple manual priority (`NORMAL`/`HIGH`/`URGENT`) + an orthogonal "pin to
+  top" flag, with a documented sort order.
+- CSRF protection (double-submit cookie) on every state-changing request.
 
 **Not implemented yet** (by design, next step): product location tracking,
 search. See `docs/mvp/kitchen-handover.md` §10.
@@ -41,11 +50,48 @@ pip install -r requirements.txt
 cp .env.example .env
 alembic upgrade head
 python scripts/seed.py
+python scripts/create_admin.py
 ```
 
 `scripts/seed.py` is idempotent — safe to re-run any time. It loads
-`data/{stations,sections,prepared_products}.csv` (demo data, not verified
-restaurant truth — edit freely) and two demo workers, "Michael" and "Anna".
+`data/{stations,sections,prepared_products}.csv` (demo catalog data, not
+verified restaurant truth — edit freely). It no longer seeds demo worker
+accounts — see "Creating accounts" below.
+
+### Production configuration
+
+Two environment variables matter outside of local dev — set them in `.env`
+(or real environment variables in production), not in source code:
+
+| Variable | Default | Production value |
+|---|---|---|
+| `SESSION_SECRET_KEY` | an insecure, obviously-fake dev default | a long random value: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `COOKIE_SECURE` | `false` | `true` **once served over HTTPS** — leave `false` for local/LAN HTTP testing, or login cookies silently won't be set |
+
+## Creating accounts (no public registration)
+
+**First admin** — run once, interactively (password is not echoed, never
+put a real password on the command line or in Git):
+
+```bash
+python scripts/create_admin.py
+```
+
+Refuses to run again once an admin already exists (pass `--force` to
+override, e.g. resetting a dev DB).
+
+**Every other account** (more admins, or workers) — log in as an admin and
+use `/admin/users`: display name, email, initial password, role. Admins can
+later change a user's role, activate/deactivate them, or reset their
+password from the same page. The system always keeps at least one active
+admin — you cannot deactivate or demote the only remaining one.
+
+## Roles
+
+| | WORKER | ADMIN |
+|---|---|---|
+| Browse stations/products, prepare tomorrow, view today/overdue tasks, complete tasks | ✅ | ✅ |
+| `/admin` (products, stations, sections, users, tasks) | ❌ (403) | ✅ |
 
 ## Running the tests
 
@@ -53,8 +99,9 @@ restaurant truth — edit freely) and two demo workers, "Michael" and "Anna".
 python -m pytest tests/ -v
 ```
 
-Current result: **45 passed** (14 model-layer, 17 `PreparationTaskService`
-unit tests, 14 route/integration tests).
+Current result: **73 passed** — model layer, `PreparationTaskService`,
+route/integration, authentication & identity/audit, admin catalog
+management, admin user management, and priority/pinning.
 
 ## Running the app
 
@@ -62,116 +109,168 @@ unit tests, 14 route/integration tests).
 uvicorn app.main:app --reload
 ```
 
-Then open **http://127.0.0.1:8000/** in a browser (ideally your phone, on
-the same network — this UI is mobile-first).
+- App: **http://127.0.0.1:8000/** (redirects to `/login` until you sign in)
+- Admin dashboard: **http://127.0.0.1:8000/admin** (ADMIN role only)
 
 ### Pages
 
 | URL | What it is |
 |---|---|
+| `/login` | Email + password login |
 | `/` | Home — station cards with today's active-task counts |
-| `/stations/{id}` | Station page — ÜBERFÄLLIG / HEUTE VORBEREITEN lists, then sections/products |
+| `/stations/{id}` | Station page — pinned/ÜBERFÄLLIG/HEUTE VORBEREITEN lists, then sections/products |
 | `/products/{id}` | Product page — FÜR MORGEN VORBEREITEN button |
-| `/worker/select?next=...` | Pick-your-name screen (no password, no real auth) |
+| `/admin` | Admin dashboard |
+| `/admin/products`, `/admin/stations`, `/admin/sections`, `/admin/users`, `/admin/tasks` | Admin CRUD pages |
 
 ### JSON API
 
 | Method & path | Purpose |
 |---|---|
-| `POST /products/{product_id}/prepare-tomorrow?worker_id=` | Create tomorrow's task (or return "already marked") |
-| `GET /stations/{station_id}/tasks/today` | Overdue + today's active tasks, sorted |
-| `POST /tasks/{task_id}/complete?worker_id=` | Mark a task done |
+| `POST /products/{product_id}/prepare-tomorrow` | Create tomorrow's task as the logged-in user (or return "already marked") |
+| `GET /stations/{station_id}/tasks/today` | Pinned/overdue/today's active tasks, sorted |
+| `POST /tasks/{task_id}/complete` | Mark a task done as the logged-in user |
 
-The same two `POST` routes also serve HTML fragments instead of JSON when
-called with an `HX-Request: true` header — that's what the UI's buttons use,
-so tapping them updates the page without a full reload.
+All three require a valid session cookie; the two `POST`s also require the
+CSRF token (`X-CSRF-Token` header, matching the `csrf_token` cookie). They
+serve HTML fragments instead of JSON when called with `HX-Request: true` —
+that's what the UI's buttons use, so tapping them updates the page without
+a full reload.
+
+## Task priority & pinning
+
+Every `PreparationTask` has `priority` (`NORMAL`/`HIGH`/`URGENT`, default
+`URGENT` — a product only gets "prepare tomorrow"'d because someone noticed
+it's finished, which is inherently urgent) and an independent `is_pinned`
+flag. An admin can change either from `/admin/tasks`.
+
+Station task lists sort: **pinned first, then overdue before today's, then
+URGENT > HIGH > NORMAL, then alphabetically** as a final tiebreaker. Pinning
+always wins — a pinned `NORMAL` task outranks an unpinned `URGENT` one.
 
 ## Manual test checklist
 
-**PASS → SALAT → Krautsalat → PREPARE TOMORROW → task list → DONE**
+A-T below mirrors a real shift handover: an admin sets up two worker
+accounts, one worker starts something, another finishes it, and the admin
+reviews/reprioritizes afterward.
 
-1. Open `/` — see 4 station cards (PASS, GRILL, FRITTEUSE, DESSERT), each
-   showing "0 Artikel vorzubereiten" on a fresh seed.
-2. You have no worker cookie yet — click "Wer bist du?" (or go straight to
-   `/worker/select?next=/`). Pick "Michael" (or type a new name) and
-   continue. You're redirected back to `/`.
-3. Click the **PASS** card → `/stations/{id}`.
-4. Under "BEREICHE" (sections), find **SALAT**, then click **Krautsalat** →
-   `/products/{id}`.
-5. Tap **FÜR MORGEN VORBEREITEN**. A green confirmation
-   ("Für morgen vorgemerkt.") appears without the page reloading.
-6. Tap it again — this time the message reads "Bereits für morgen
-   vorgemerkt." and no second task was created (duplicate guard).
-7. Go back to the **PASS** station page. Krautsalat does **not** appear
-   yet — its task is due *tomorrow*, and the list intentionally only shows
-   tasks due today or earlier.
-8. To see the "today" and "overdue" states without waiting a day, use the
-   API directly (or a Python shell) to backdate a task, e.g.:
-   ```bash
-   curl -X POST "http://127.0.0.1:8000/products/{another_product_id}/prepare-tomorrow?worker_id={worker_id}"
-   ```
-   then, in a Python shell (`python -c "..."` with `app.db.session.SessionLocal`),
-   set that task's `due_date` to today (or yesterday) and commit.
-9. Reload the **PASS** station page — the backdated product now appears
-   under ÜBERFÄLLIG (if due_date was yesterday) or HEUTE VORBEREITEN (if
-   today), with overdue items listed first.
-10. Tap **FERTIG** on that task. It disappears from the active list
-    immediately (HTMX swap, no full reload) and a "Erledigt." flash message
-    appears.
-11. Confirm it's still in the database as history (not deleted):
-    ```bash
-    curl http://127.0.0.1:8000/stations/{station_id}/tasks/today
-    ```
-    — the completed task is absent from this active list, but
-    `PreparationTask.status = COMPLETED` rows are never deleted.
+**A. Create the first admin**
+```bash
+python scripts/create_admin.py
+```
+
+**B. Login as admin** — open `/login`, sign in.
+
+**C-D. Create two worker accounts** — `/admin/users`: create "Raihan"
+(role `WORKER`) and "Ana" (role `WORKER`).
+
+**E. Logout** — the header's `ABMELDEN` link.
+
+**F. Login as Raihan.**
+
+**G. Mark Krautsalat "prepare tomorrow"** — PASS → SALAT → Krautsalat →
+`FÜR MORGEN VORBEREITEN`.
+
+**H. Verify the task records Raihan** — check `/admin/tasks`: "Erstellt
+von" (created by) shows Raihan, not anyone else.
+
+**I. Logout. J. Login as Ana.**
+
+**K. Verify Ana cannot act as Raihan** — there is no worker-selection UI
+anymore; the acting identity is always whoever is logged in. (If you want
+to prove this at the HTTP level: `curl`'ing
+`/tasks/{id}/complete?worker_id=<raihan's id>` while logged in as Ana still
+records Ana — the query param is simply never read.)
+
+**L. Complete a different task as Ana** (any active task — back-date one to
+today first if everything is still due tomorrow; see note below).
+
+**M. Verify the completion records Ana** — `/admin/tasks` → "Erledigt von"
+(completed by) shows Ana.
+
+**N. Login as admin again. O. Open `/admin`.**
+
+**P. Add a prepared product** — `/admin/products` → fill the form → add.
+
+**Q. Edit it** — `/admin/products/{id}/edit`, change the name, save.
+
+**R. Set a task's priority** — `/admin/tasks`, change a task's priority
+dropdown (auto-submits).
+
+**S. Pin a lower-priority task** — e.g. a `HIGH` task — via the `ANHEFTEN`
+button.
+
+**T. Verify it now sorts first** — reload `/stations/{id}` or
+`GET /stations/{id}/tasks/today`: the pinned task is first, even ahead of
+`URGENT` ones.
+
+> **Note on "today" during manual testing:** a freshly created task from
+> `PREPARE TOMORROW` is due *tomorrow* by design, so it won't show in
+> today's list yet. To see it immediately for testing, either use
+> `/admin/tasks` → create a manual task with today's date, or open a Python
+> shell (`SessionLocal` from `app.db.session`) and set an existing task's
+> `due_date` back to today.
 
 ## Project layout
 
-See `docs/mvp/kitchen-handover.md` §7 for the full rationale. Current state:
-
 ```
 app/
-├── main.py            # FastAPI app, routers, exception handlers, static mount
-├── core/               # config, enums, i18n strings, worker-cookie dependency
-├── db/                 # declarative Base, engine/session
-├── models/             # SQLAlchemy ORM models (unchanged since step 1)
-├── repositories/        # SQLAlchemy queries only — no business logic
-├── services/            # PreparationTaskService — all business logic lives here
-├── schemas/             # Pydantic request/response models
-├── routes/              # thin FastAPI routers (pages, products, stations, tasks, worker)
-├── templates/           # Jinja2 + HTMX, mobile-first
-└── static/              # plain CSS + vendored htmx.min.js (no CDN dependency)
+├── main.py             # FastAPI app, middleware, routers, exception handlers
+├── core/                # config, enums, i18n, security (Argon2), session
+│                         # tokens, CSRF middleware, auth dependencies
+├── db/                  # declarative Base, engine/session
+├── models/              # SQLAlchemy ORM models
+├── repositories/         # SQLAlchemy queries only — no business logic
+├── services/             # PreparationTaskService, auth_service,
+│                          # catalog_admin_service, user_admin_service
+├── schemas/              # Pydantic request/response models
+├── routes/               # thin FastAPI routers (auth, pages, products,
+│                          # stations, tasks, admin*)
+├── templates/            # Jinja2 + HTMX, mobile-first; templates/admin/
+│                          # for the back office
+└── static/               # plain CSS + vendored htmx.min.js (no CDN dependency)
 ```
-
-`schemas/`, `repositories/`, `services/`, `routes/` now have real content;
-location tracking (the second MVP problem) is the next step, not yet built.
 
 ## Database
 
-SQLite for development (`kitchen_handover.db`, git-ignored). Alembic manages
-migrations; the first one (`alembic/versions/*_initial_schema.py`) creates
-all seven tables: `stations`, `sections`, `storage_locations`, `workers`,
-`prepared_products`, `preparation_tasks`, `product_location_history`.
-(`storage_locations` and `product_location_history` exist in the schema
-already but aren't used by any workflow yet.)
+SQLite for development (`kitchen_handover.db`, git-ignored). Alembic
+manages migrations — two so far: the initial schema, then
+`add_auth_fields_to_worker_and_priority_to_preparation_task`, which added
+`email`/`password_hash`/`role`/`created_at`/`updated_at` to `workers` and
+`priority`/`is_pinned` to `preparation_tasks`.
 
-Notable constraints baked in at the database level (not just in Python):
+**One unavoidable dev-data change, documented in that migration's
+docstring:** it deletes the old "Michael"/"Anna" demo `Worker` rows. They
+had no email/password and *were* the free worker-selection mechanism this
+change removes — they cannot be grandfathered into the new schema. The
+delete fails loudly (a foreign-key error) rather than silently orphaning
+anything if a `PreparationTask` ever referenced them; in this project's dev
+database none did.
 
-- `preparation_tasks.status` has a `CHECK` constraint restricting it to
-  `TO_PREPARE` / `COMPLETED`.
+Notable constraints at the database level (not just in Python):
+
+- `workers.email` is unique; `workers.role` and `preparation_tasks.status`/
+  `priority` all have `CHECK` constraints restricting them to their valid
+  enum values.
 - A **partial unique index** on `preparation_tasks (prepared_product_id,
   due_date)` — scoped to `WHERE status = 'TO_PREPARE'` — prevents a
-  duplicate active task for the same product and due date (pressing
-  "prepare tomorrow" twice does not create two rows), while still allowing
-  an unrelated overdue task and a new tomorrow-task to coexist. The service
-  layer also catches the race-condition case (two near-simultaneous taps)
-  and still returns a friendly "already marked" result instead of a 500.
+  duplicate active task for the same product and due date, while still
+  allowing an unrelated overdue task and a new tomorrow-task to coexist.
 - Foreign keys are enforced (tests turn on `PRAGMA foreign_keys=ON`
   explicitly, since SQLite doesn't do this by default).
 
-## No authentication
+## Security notes
 
-There is no login. `/worker/select` sets a plain (unsigned) cookie
-remembering which `Worker` row you are, purely so prepare-tomorrow/complete
-actions can record who did them. Good enough for a shared kitchen tablet,
-not meant to be secure.
+- Passwords: Argon2 (`argon2-cffi`), never logged, never stored in
+  plaintext.
+- Sessions: a signed, timestamped cookie (`itsdangerous`) — not a JWT, no
+  server-side session table. `HttpOnly`, `SameSite=Lax`, `Secure` in
+  production (see `COOKIE_SECURE` above). 14-day expiry by default.
+- CSRF: double-submit cookie on every state-changing request.
+- Login responses don't distinguish "unknown email" from "wrong password",
+  and check against a dummy hash when the email doesn't exist, to avoid
+  leaking account existence through response content or timing.
+- Nothing here is enterprise-grade (no rate limiting, no account lockout,
+  no 2FA, no audit log beyond what `created_by`/`completed_by`/`role`
+  already capture) — appropriate for a single-restaurant kitchen tool, not
+  a public-facing system.
