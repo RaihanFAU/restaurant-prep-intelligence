@@ -22,6 +22,9 @@ DE = {
     "already_completed_message": "War bereits erledigt.",
     "due_yesterday_or_earlier": "Fällig: vor heute",
     "due_today": "Fällig: heute",
+    "count_today_label": "heute",
+    "count_tomorrow_label": "für morgen",
+    "tomorrow_heading": "FÜR MORGEN VORGEMERKT",
 
     # --- auth ---
     "email_label": "E-Mail",
@@ -33,6 +36,19 @@ DE = {
     "csrf_error": "Sitzung abgelaufen, bitte erneut versuchen.",
     "admin_link": "ADMIN",
 
+    # --- worker PIN login ---
+    "worker_name_label": "Mitarbeiter",
+    "pin_label": "PIN",
+    "confirm_pin_label": "PIN bestätigen",
+    "new_pin_label": "Neue PIN",
+    "reset_pin_button": "PIN ZURÜCKSETZEN",
+    "pin_login_error": "Mitarbeiter oder PIN ist falsch.",
+    "pin_locked_error": "Zu viele Fehlversuche. Bitte in ein paar Minuten erneut versuchen.",
+    "pin_locked_label": "PIN vorübergehend gesperrt",
+    "admin_login_heading": "Admin-Anmeldung",
+    "admin_login_link_label": "Admin-Anmeldung",
+    "worker_login_link_label": "Zur Mitarbeiter-Anmeldung",
+
     # --- admin: shared ---
     "admin_dashboard_title": "Admin",
     "admin_products_card": "PRODUKTE",
@@ -40,6 +56,11 @@ DE = {
     "admin_sections_card": "BEREICHE",
     "admin_users_card": "BENUTZER",
     "admin_tasks_card": "AUFGABEN",
+    "admin_products_desc": "Vorbereitete Produkte verwalten",
+    "admin_stations_desc": "PASS / GRILL / FRITTEUSE / DESSERT verwalten",
+    "admin_sections_desc": "Bereiche wie DIPS / SALAT / SCHWEIN verwalten",
+    "admin_users_desc": "Mitarbeiterkonten und PINs verwalten",
+    "admin_tasks_desc": "Aktive Aufgaben und Priorität verwalten",
     "active_label": "Aktiv",
     "inactive_label": "Inaktiv",
     "edit_button": "BEARBEITEN",
