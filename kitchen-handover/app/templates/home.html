@@ -7,7 +7,10 @@
     {% for row in station_rows %}
     <a class="station-card" href="/stations/{{ row.station.id }}">
         <span>{{ row.station.name }}</span>
-        <span class="count">{{ row.active_count }} {{ t.items_to_prepare }}</span>
+        <span class="count">
+            {{ row.active_count }} {{ t.count_today_label }}<br>
+            {{ row.tomorrow_count }} {{ t.count_tomorrow_label }}
+        </span>
     </a>
     {% endfor %}
 </div>
