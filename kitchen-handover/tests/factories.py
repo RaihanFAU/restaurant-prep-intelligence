@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.enums import Role
-from app.core.security import hash_password
+from app.core.security import hash_password, hash_pin
 from app.models import PreparedProduct, Station, Worker
 
 
@@ -22,6 +22,24 @@ def make_worker(
         display_name=display_name,
         email=email,
         password_hash=hash_password(password),
+        role=role,
+        is_active=is_active,
+    )
+    db.add(worker)
+    db.commit()
+    return worker
+
+
+def make_worker_pin(
+    db: Session, *, display_name: str = "Raihan", email: str = "raihan-pin@example.test",
+    pin: str = "1234", role: Role = Role.WORKER, is_active: bool = True,
+) -> Worker:
+    """A WORKER account created the way /admin/users now creates them: with
+    a PIN and no password at all (see test_worker_pin_auth.py)."""
+    worker = Worker(
+        display_name=display_name,
+        email=email,
+        pin_hash=hash_pin(pin),
         role=role,
         is_active=is_active,
     )
@@ -56,6 +74,17 @@ def login(client: TestClient, email: str, password: str):
     return client.post(
         "/login",
         data={"email": email, "password": password, "next": "/", "csrf_token": csrf_token},
+        follow_redirects=False,
+    )
+
+
+def login_pin(client: TestClient, display_name: str, pin: str):
+    """Same idea as login(), for the WORKER NAME + PIN flow."""
+    client.get("/worker-login")
+    csrf_token = client.cookies.get("csrf_token")
+    return client.post(
+        "/worker-login",
+        data={"display_name": display_name, "pin": pin, "next": "/", "csrf_token": csrf_token},
         follow_redirects=False,
     )
 
