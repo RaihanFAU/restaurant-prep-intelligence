@@ -94,3 +94,42 @@ class LastAdminError(Exception):
 
     def __init__(self):
         super().__init__("Cannot deactivate or demote the only remaining active admin.")
+
+
+class PasswordRequiredForAdminError(Exception):
+    """A WORKER account created through the PIN-based flow has no password
+    at all. Promoting it to ADMIN (or creating a new account directly as
+    ADMIN through the worker-creation form) would leave an admin account
+    that can never log in, since ADMIN only ever authenticates with
+    email+password. Set a password first (the existing password-reset
+    form works on any account, regardless of its current role)."""
+
+    def __init__(self):
+        super().__init__(
+            "ADMIN accounts require a password. Set a password for this account first "
+            "(or use scripts/create_admin.py), then change its role to ADMIN."
+        )
+
+
+# --- worker PIN login ---
+
+
+class InvalidPinFormatError(Exception):
+    def __init__(self):
+        super().__init__("PIN must be exactly 4 numeric digits.")
+
+
+class PinMismatchError(Exception):
+    def __init__(self):
+        super().__init__("PIN and confirmation do not match.")
+
+
+class InvalidPinError(Exception):
+    """Wrong worker name or wrong PIN. Deliberately the same error for both
+    (and never reveals which digit was wrong) — same reasoning as
+    InvalidCredentialsError for email+password."""
+
+
+class PinLockedError(Exception):
+    """Too many wrong PINs in a row; further attempts are refused for a
+    while, regardless of whether this one would have been correct."""
