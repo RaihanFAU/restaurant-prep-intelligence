@@ -17,23 +17,30 @@ No quantities, forecasting, AI, recipes, or integrations.
 
 ## Current status
 
-**Workflow 1, real authentication, role-based admin, and manual task
-priority are complete and working end to end:**
+**Workflow 1, real authentication (with a fast PIN login for daily
+worker use), role-based admin, and manual task priority are complete and
+working end to end:**
 
 ```
 Login → Product → PREPARE TOMORROW → Today/Overdue task list → Complete
 ```
 
-- Real email+password login (Argon2-hashed passwords, signed session
-  cookie) — **replaces** the old "pick any worker's name" mechanism, which
-  let one worker complete tasks under another worker's name. The acting
-  worker is now always the authenticated session user; the server never
-  trusts a client-supplied worker id.
+- Two separate login flows:
+  - **`/login`** — email + password (Argon2-hashed). For `ADMIN` accounts.
+  - **`/worker-login`** — worker name + 4-digit PIN (also Argon2-hashed).
+    For everyday `WORKER` use — much faster to type on a shared kitchen
+    device than an email and password every shift. A PIN can never grant
+    `ADMIN` access, and repeated wrong PINs temporarily lock the account
+    (see "Worker PIN login" below).
+  - Both **replace** the original "pick any worker's name" mechanism,
+    which let one worker complete tasks under another worker's name. The
+    acting worker is always the authenticated session user; the server
+    never trusts a client-supplied worker id.
 - Two roles: `ADMIN`, `WORKER`. Admin routes are protected server-side
   (a `WORKER` hitting `/admin` gets `403`, not just a hidden button).
 - `/admin` dashboard: manage prepared products, stations, sections, user
-  accounts, and task priority/pinning — no more editing CSVs or Python to
-  add a product.
+  accounts (incl. worker PINs), and task priority/pinning — no more
+  editing CSVs or Python to add a product.
 - Simple manual priority (`NORMAL`/`HIGH`/`URGENT`) + an orthogonal "pin to
   top" flag, with a documented sort order.
 - CSRF protection (double-submit cookie) on every state-changing request.
@@ -80,11 +87,37 @@ python scripts/create_admin.py
 Refuses to run again once an admin already exists (pass `--force` to
 override, e.g. resetting a dev DB).
 
-**Every other account** (more admins, or workers) — log in as an admin and
-use `/admin/users`: display name, email, initial password, role. Admins can
-later change a user's role, activate/deactivate them, or reset their
-password from the same page. The system always keeps at least one active
-admin — you cannot deactivate or demote the only remaining one.
+**Worker accounts** — log in as an admin and use `/admin/users`: display
+name, email, a 4-digit PIN (entered twice), role (defaults to `WORKER`).
+This is the normal day-to-day case — workers log in at `/worker-login`
+with their name and that PIN, not email+password.
+
+**Additional admin accounts** — there's no UI form for this (an `ADMIN`
+account always needs a password, and the `/admin/users` form only ever
+collects a PIN). Either run `python scripts/create_admin.py --force`
+again, or promote an existing worker: use `/admin/users/{id}/edit` to set
+a password for them first (the password-reset form works on any
+account), then change their role to `ADMIN`. Trying to promote someone
+with no password set is rejected with a clear error telling you to set
+one first.
+
+From `/admin/users/{id}/edit` an admin can also change a worker's role,
+activate/deactivate them, reset their password, or reset their PIN (which
+also clears any active lockout — see below). The system always keeps at
+least one active admin — you cannot deactivate or demote the only
+remaining one.
+
+### Worker PIN login
+
+- A PIN is exactly 4 numeric digits, Argon2-hashed exactly like a
+  password — never stored or logged in plain text.
+- After **5** wrong PINs in a row for the same worker, further attempts
+  (even the correct PIN) are refused for **15 minutes**
+  (`pin_max_failed_attempts` / `pin_lockout_seconds` in `app/core/config.py`).
+  A correct login, or an admin resetting the PIN, clears the count.
+- The login error is identical whether the worker name doesn't exist, the
+  account has no PIN, it belongs to an `ADMIN`, or the PIN is simply
+  wrong — never reveals which.
 
 ## Roles
 
@@ -99,9 +132,10 @@ admin — you cannot deactivate or demote the only remaining one.
 python -m pytest tests/ -v
 ```
 
-Current result: **73 passed** — model layer, `PreparationTaskService`,
+Current result: **87 passed** — model layer, `PreparationTaskService`,
 route/integration, authentication & identity/audit, admin catalog
-management, admin user management, and priority/pinning.
+management, admin user management, priority/pinning, and worker PIN
+login (creation, hashing, login, lockout, admin PIN reset).
 
 ## Running the app
 
@@ -116,7 +150,8 @@ uvicorn app.main:app --reload
 
 | URL | What it is |
 |---|---|
-| `/login` | Email + password login |
+| `/login` | Admin login — email + password |
+| `/worker-login` | Worker login — name + 4-digit PIN (the everyday entry point) |
 | `/` | Home — station cards with today's active-task counts |
 | `/stations/{id}` | Station page — pinned/ÜBERFÄLLIG/HEUTE VORBEREITEN lists, then sections/products |
 | `/products/{id}` | Product page — FÜR MORGEN VORBEREITEN button |
@@ -162,11 +197,12 @@ python scripts/create_admin.py
 **B. Login as admin** — open `/login`, sign in.
 
 **C-D. Create two worker accounts** — `/admin/users`: create "Raihan"
-(role `WORKER`) and "Ana" (role `WORKER`).
+(PIN `1234`, role `WORKER`) and "Ana" (PIN `5678`, role `WORKER`).
 
 **E. Logout** — the header's `ABMELDEN` link.
 
-**F. Login as Raihan.**
+**F. Login as Raihan** — at `/worker-login` this time, not `/login`: pick
+"Raihan" from the dropdown, enter PIN `1234`.
 
 **G. Mark Krautsalat "prepare tomorrow"** — PASS → SALAT → Krautsalat →
 `FÜR MORGEN VORBEREITEN`.
@@ -174,13 +210,13 @@ python scripts/create_admin.py
 **H. Verify the task records Raihan** — check `/admin/tasks`: "Erstellt
 von" (created by) shows Raihan, not anyone else.
 
-**I. Logout. J. Login as Ana.**
+**I. Logout. J. Login as Ana** — `/worker-login`, PIN `5678`.
 
 **K. Verify Ana cannot act as Raihan** — there is no worker-selection UI
-anymore; the acting identity is always whoever is logged in. (If you want
-to prove this at the HTTP level: `curl`'ing
-`/tasks/{id}/complete?worker_id=<raihan's id>` while logged in as Ana still
-records Ana — the query param is simply never read.)
+anymore, and Ana doesn't know Raihan's PIN; the acting identity is always
+whoever is logged in. (If you want to prove this at the HTTP level:
+`curl`'ing `/tasks/{id}/complete?worker_id=<raihan's id>` while logged in
+as Ana still records Ana — the query param is simply never read.)
 
 **L. Complete a different task as Ana** (any active task — back-date one to
 today first if everything is still due tomorrow; see note below).
@@ -203,6 +239,14 @@ button.
 **T. Verify it now sorts first** — reload `/stations/{id}` or
 `GET /stations/{id}/tasks/today`: the pinned task is first, even ahead of
 `URGENT` ones.
+
+**U. Trigger the PIN lockout** — at `/worker-login`, enter the wrong PIN
+for Raihan 5 times in a row; the 6th attempt (even with the correct PIN)
+is refused for 15 minutes.
+
+**V. Admin resets the PIN** — as admin, `/admin/users/{raihan's id}/edit`
+→ enter a new PIN twice → `PIN ZURÜCKSETZEN`. This also clears the
+lockout from step U, so Raihan can log in immediately with the new PIN.
 
 > **Note on "today" during manual testing:** a freshly created task from
 > `PREPARE TOMORROW` is due *tomorrow* by design, so it won't show in
@@ -234,10 +278,13 @@ app/
 ## Database
 
 SQLite for development (`kitchen_handover.db`, git-ignored). Alembic
-manages migrations — two so far: the initial schema, then
-`add_auth_fields_to_worker_and_priority_to_preparation_task`, which added
+manages migrations — three so far: the initial schema, then
+`add_auth_fields_to_worker_and_priority_to_preparation_task` (added
 `email`/`password_hash`/`role`/`created_at`/`updated_at` to `workers` and
-`priority`/`is_pinned` to `preparation_tasks`.
+`priority`/`is_pinned` to `preparation_tasks`), then
+`add_worker_pin_authentication` (added `pin_hash`/`failed_pin_attempts`/
+`pin_locked_until` to `workers`, and loosened `password_hash` from
+`NOT NULL` to nullable — a PIN-only `WORKER` account never gets one).
 
 **One unavoidable dev-data change, documented in that migration's
 docstring:** it deletes the old "Michael"/"Anna" demo `Worker` rows. They
@@ -261,16 +308,22 @@ Notable constraints at the database level (not just in Python):
 
 ## Security notes
 
-- Passwords: Argon2 (`argon2-cffi`), never logged, never stored in
-  plaintext.
+- Passwords and PINs: both Argon2 (`argon2-cffi`), never logged, never
+  stored in plaintext. A PIN is treated as "just a short password" —
+  same hashing call, no separate scheme.
 - Sessions: a signed, timestamped cookie (`itsdangerous`) — not a JWT, no
   server-side session table. `HttpOnly`, `SameSite=Lax`, `Secure` in
   production (see `COOKIE_SECURE` above). 14-day expiry by default.
 - CSRF: double-submit cookie on every state-changing request.
-- Login responses don't distinguish "unknown email" from "wrong password",
-  and check against a dummy hash when the email doesn't exist, to avoid
-  leaking account existence through response content or timing.
-- Nothing here is enterprise-grade (no rate limiting, no account lockout,
-  no 2FA, no audit log beyond what `created_by`/`completed_by`/`role`
-  already capture) — appropriate for a single-restaurant kitchen tool, not
-  a public-facing system.
+- Login responses don't distinguish "unknown email" from "wrong password"
+  (or, on the PIN side, "unknown worker" from "wrong PIN" from "that's an
+  ADMIN account"), and check against a dummy hash when the account doesn't
+  exist, to avoid leaking account existence through response content or
+  timing.
+- PIN login has basic brute-force protection: 5 wrong PINs in a row locks
+  that account out for 15 minutes (see "Worker PIN login" above) — a
+  password login has no equivalent lockout, since a password is assumed
+  to have enough entropy that this MVP doesn't need one.
+- Nothing here is enterprise-grade (no 2FA, no audit log beyond what
+  `created_by`/`completed_by`/`role` already capture) — appropriate for a
+  single-restaurant kitchen tool, not a public-facing system.
