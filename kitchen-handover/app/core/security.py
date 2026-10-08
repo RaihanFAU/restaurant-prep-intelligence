@@ -21,3 +21,15 @@ def verify_password(raw_password: str, password_hash: str) -> bool:
         return _hasher.verify(password_hash, raw_password)
     except VerifyMismatchError:
         return False
+
+
+# Worker PINs are hashed with the exact same Argon2 infrastructure as
+# passwords — a PIN is just a short password, so there's no reason to build
+# or depend on a second hashing scheme. Separate names only for readability
+# at call sites (hash_pin/verify_pin vs hash_password/verify_password).
+def hash_pin(raw_pin: str) -> str:
+    return hash_password(raw_pin)
+
+
+def verify_pin(raw_pin: str, pin_hash: str) -> bool:
+    return verify_password(raw_pin, pin_hash)
