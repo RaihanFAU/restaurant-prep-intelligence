@@ -7,13 +7,5 @@
     {% if product.section %} → {{ product.section.name }}{% endif %}
 </p>
 
-<button class="big-button primary"
-        hx-post="/products/{{ product.id }}/prepare-tomorrow"
-        hx-headers='{"X-CSRF-Token": "{{ request.state.csrf_token }}"}'
-        hx-target="#prepare-feedback"
-        hx-swap="innerHTML">
-    {{ t.prepare_tomorrow_button }}
-</button>
-
-<div id="prepare-feedback"></div>
+{% include "_prepare_tomorrow_area.html" %}
 {% endblock %}
