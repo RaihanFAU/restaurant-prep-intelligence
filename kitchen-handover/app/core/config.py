@@ -22,5 +22,12 @@ class Settings(BaseSettings):
     # in the environment once the app is served over HTTPS.
     cookie_secure: bool = False
 
+    # --- worker PIN login brute-force protection ---
+    # A 4-digit PIN has only 10,000 possibilities, far fewer than a password
+    # — acceptable for a fast internal kitchen login ONLY because repeated
+    # wrong guesses get temporarily locked out (see auth_service.authenticate_pin).
+    pin_max_failed_attempts: int = 5
+    pin_lockout_seconds: int = 15 * 60
+
 
 settings = Settings()
