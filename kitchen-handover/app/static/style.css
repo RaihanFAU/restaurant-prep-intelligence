@@ -88,6 +88,18 @@ h2 { font-size: 1.15rem; margin: 1.5rem 0 0.5rem; letter-spacing: 0.04em; }
     font-size: 0.95rem;
 }
 
+.admin-card span {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.admin-card small {
+    color: var(--color-muted);
+    font-weight: 400;
+    font-size: 0.85rem;
+}
+
 .big-button {
     display: block;
     width: 100%;
@@ -134,6 +146,7 @@ h2 { font-size: 1.15rem; margin: 1.5rem 0 0.5rem; letter-spacing: 0.04em; }
 
 .task-item.overdue { border-left: 6px solid var(--color-overdue); }
 .task-item.today { border-left: 6px solid var(--color-today); }
+.task-item.tomorrow { border-left: 6px solid var(--color-muted); opacity: 0.85; }
 
 .task-item .due-note {
     display: block;
