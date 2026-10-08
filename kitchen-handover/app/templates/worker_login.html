@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %} · {{ t.app_name }}{% endblock %}
+{% block content %}
+<h1>{{ t.app_name }}</h1>
+
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/worker-login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+    <label for="display_name">{{ t.worker_name_label }}</label>
+    <select id="display_name" name="display_name" required autofocus>
+        {% for worker in workers %}
+        <option value="{{ worker.display_name }}">{{ worker.display_name }}</option>
+        {% endfor %}
+    </select>
+
+    <label for="pin">{{ t.pin_label }}</label>
+    <input type="password" id="pin" name="pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off">
+
+    <button class="big-button primary" type="submit">{{ t.login_button }}</button>
+</form>
+
+<p><a href="/login">{{ t.admin_login_link_label }}</a></p>
+{% endblock %}
