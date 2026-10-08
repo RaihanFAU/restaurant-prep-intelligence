@@ -144,6 +144,45 @@ class PreparationTaskService:
         )
         return items
 
+    def get_station_tasks_tomorrow(self, station_id: int, today: date | None = None) -> list[TaskListItem]:
+        """status = TO_PREPARE AND due_date == today + 1 day — the "queued
+        for tomorrow" handover state, shown separately from
+        get_station_tasks_today so a worker sees immediately that
+        something was prepped for the next shift, without it being
+        mistaken for something actionable right now. Deliberately never
+        includes anything due today or overdue (that's the other method),
+        and never requires waiting for midnight — it's a live DB query,
+        correct the instant the task is created.
+        """
+        today = today or date.today()
+        tomorrow = today + timedelta(days=1)
+
+        station = station_repository.get_station(self.db, station_id)
+        if station is None:
+            raise StationNotFoundError(station_id)
+
+        tasks = preparation_task_repository.get_station_tasks_tomorrow(self.db, station_id, tomorrow)
+        items = [TaskListItem(task=t, is_overdue=False) for t in tasks]
+        items.sort(
+            key=lambda item: (
+                0 if item.task.is_pinned else 1,
+                _PRIORITY_RANK[item.task.priority],
+                item.task.product.name_de.lower(),
+            )
+        )
+        return items
+
+    def get_active_tomorrow_task(self, product_id: int, today: date | None = None) -> PreparationTask | None:
+        """Does this product already have an active (TO_PREPARE) task
+        queued for tomorrow? Drives the product page's persistent
+        "already marked" state — read fresh from the database on every
+        request, so it's correct after a reload or for a different
+        worker opening the same page, not just right after the button
+        was clicked."""
+        today = today or date.today()
+        tomorrow = today + timedelta(days=1)
+        return preparation_task_repository.find_active_task(self.db, product_id, tomorrow)
+
     def set_priority(self, task_id: int, priority: TaskPriority) -> PreparationTask:
         """Admin-only in practice (enforced at the route layer, not here —
         this service has no concept of roles)."""
