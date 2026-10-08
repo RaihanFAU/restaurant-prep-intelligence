@@ -75,6 +75,27 @@ def get_station_tasks_today(db: Session, station_id: int, today: date) -> list[P
     return list(db.scalars(stmt).unique())
 
 
+def get_station_tasks_tomorrow(db: Session, station_id: int, tomorrow: date) -> list[PreparationTask]:
+    """Active tasks due exactly tomorrow — the "queued for handover" state.
+    Deliberately a separate query from get_station_tasks_today (due_date
+    <= today), not a filter applied afterward: a tomorrow task must never
+    be countable as part of today's actionable list, and this list must
+    be correct immediately, not only after due_date rolls over at
+    midnight (it's the same row either way — rolling over doesn't change
+    which query it matches, it only changes which one is TRUE for it)."""
+    stmt = (
+        select(PreparationTask)
+        .join(PreparedProduct, PreparationTask.prepared_product_id == PreparedProduct.id)
+        .where(
+            PreparedProduct.station_id == station_id,
+            PreparationTask.status == TaskStatus.TO_PREPARE,
+            PreparationTask.due_date == tomorrow,
+        )
+        .options(joinedload(PreparationTask.product))
+    )
+    return list(db.scalars(stmt).unique())
+
+
 def mark_completed(
     db: Session, task: PreparationTask, *, completed_by_id: int, completed_at: datetime
 ) -> PreparationTask:
