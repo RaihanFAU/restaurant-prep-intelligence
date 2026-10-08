@@ -10,6 +10,7 @@ calls for even though it isn't in the numbered test list.
 from app.core.enums import Role
 from app.core.security import verify_password
 from app.models import Worker
+from app.services import user_admin_service
 from tests.factories import csrf_form_field, login, make_worker
 
 
@@ -19,6 +20,11 @@ def _login_admin(client, db_session):
 
 
 def test_18_admin_can_create_worker(client, db_session):
+    """Worker creation note: as of the PIN-login change, /admin/users
+    creates workers with a 4-digit PIN instead of a password — see
+    test_worker_pin_auth.py for the full PIN-specific coverage (format
+    validation, hashing, login, lockout). This test just confirms the
+    endpoint still creates a WORKER account."""
     _login_admin(client, db_session)
 
     response = client.post(
@@ -26,7 +32,8 @@ def test_18_admin_can_create_worker(client, db_session):
         data={
             "display_name": "Raihan",
             "email": "raihan@example.test",
-            "password": "a-real-password",
+            "pin": "1234",
+            "confirm_pin": "1234",
             "role": "WORKER",
             **csrf_form_field(client),
         },
@@ -48,7 +55,8 @@ def test_19_duplicate_email_rejected(client, db_session):
         data={
             "display_name": "Someone New",
             "email": "taken@example.test",
-            "password": "another-password",
+            "pin": "1234",
+            "confirm_pin": "1234",
             "role": "WORKER",
             **csrf_form_field(client),
         },
@@ -58,20 +66,14 @@ def test_19_duplicate_email_rejected(client, db_session):
 
 
 def test_20_password_is_stored_hashed_never_plaintext(client, db_session):
-    _login_admin(client, db_session)
-
-    client.post(
-        "/admin/users",
-        data={
-            "display_name": "Raihan",
-            "email": "raihan@example.test",
-            "password": "super-secret-value",
-            "role": "WORKER",
-            **csrf_form_field(client),
-        },
+    """Renamed in spirit, not in number: workers no longer get a password
+    at all (see test_18's note), so this now confirms the admin-created
+    password case — scripts/create_admin.py's path (user_admin_service.create_user)
+    — while test_worker_pin_auth.py's test_2 covers the equivalent PIN case."""
+    worker = user_admin_service.create_user(
+        db_session, display_name="Raihan", email="raihan@example.test", password="super-secret-value", role=Role.WORKER
     )
 
-    worker = db_session.query(Worker).filter_by(email="raihan@example.test").first()
     assert worker.password_hash != "super-secret-value"
     assert "super-secret-value" not in worker.password_hash
     assert worker.password_hash.startswith("$argon2")
@@ -87,7 +89,8 @@ def test_worker_cannot_create_users(client, db_session):
         data={
             "display_name": "Raihan",
             "email": "raihan@example.test",
-            "password": "whatever",
+            "pin": "1234",
+            "confirm_pin": "1234",
             "role": "ADMIN",
             **csrf_form_field(client),
         },
