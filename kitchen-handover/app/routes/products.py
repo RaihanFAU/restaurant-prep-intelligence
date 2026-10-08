@@ -34,10 +34,15 @@ def prepare_tomorrow(
     message = TEXTS["already_marked_message"] if result.already_marked else TEXTS["prepared_tomorrow_message"]
 
     if request.headers.get("hx-request") == "true":
+        # Swap in the same persistent "already marked" fragment the
+        # product page itself renders on a fresh GET — so the button
+        # disappears and the checkmark state appears immediately,
+        # without waiting for a reload, and a reload shows the exact
+        # same thing because both read from the database.
         return templates.TemplateResponse(
             request,
-            "_prepare_tomorrow_feedback.html",
-            {"t": TEXTS, "message": message, "already_marked": result.already_marked},
+            "_prepare_tomorrow_area.html",
+            {"t": TEXTS, "product": result.task.product, "tomorrow_task": result.task, "status_message": message},
         )
 
     return PrepareTomorrowResponse(
