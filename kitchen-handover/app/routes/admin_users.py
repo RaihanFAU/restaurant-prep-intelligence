@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -11,10 +13,22 @@ from app.db.session import get_db
 from app.models import Worker
 from app.repositories import worker_repository
 from app.services import user_admin_service
-from app.services.errors import DuplicateEmailError, LastAdminError, WorkerNotFoundError
+from app.services.errors import (
+    DuplicateEmailError,
+    DuplicateNameError,
+    InvalidPinFormatError,
+    LastAdminError,
+    PasswordRequiredForAdminError,
+    PinMismatchError,
+    WorkerNotFoundError,
+)
 
 router = APIRouter(prefix="/admin/users", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _is_pin_locked(worker: Worker) -> bool:
+    return worker.pin_locked_until is not None and worker.pin_locked_until > datetime.utcnow()
 
 
 @router.get("")
@@ -30,7 +44,8 @@ def create_user(
     request: Request,
     display_name: str = Form(...),
     email: str = Form(...),
-    password: str = Form(...),
+    pin: str = Form(...),
+    confirm_pin: str = Form(...),
     role: str = Form("WORKER"),
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
@@ -38,10 +53,15 @@ def create_user(
 ):
     verify_csrf(request, csrf_token)
     try:
-        user_admin_service.create_user(
-            db, display_name=display_name.strip(), email=email.strip().lower(), password=password, role=Role(role)
+        user_admin_service.create_worker_pin(
+            db,
+            display_name=display_name.strip(),
+            email=email.strip().lower(),
+            pin=pin,
+            confirm_pin=confirm_pin,
+            role=Role(role),
         )
-    except DuplicateEmailError as exc:
+    except (DuplicateEmailError, DuplicateNameError, InvalidPinFormatError, PinMismatchError, PasswordRequiredForAdminError) as exc:
         workers = worker_repository.list_all_workers(db)
         return templates.TemplateResponse(
             request,
@@ -60,7 +80,9 @@ def edit_user_form(
     if worker is None:
         raise WorkerNotFoundError(worker_id)
     return templates.TemplateResponse(
-        request, "admin/user_edit.html", {"t": TEXTS, "current_user": current_user, "worker": worker, "error": None}
+        request,
+        "admin/user_edit.html",
+        {"t": TEXTS, "current_user": current_user, "worker": worker, "is_pin_locked": _is_pin_locked(worker), "error": None},
     )
 
 
@@ -76,12 +98,12 @@ def change_role(
     verify_csrf(request, csrf_token)
     try:
         user_admin_service.change_role(db, worker_id, Role(role))
-    except LastAdminError as exc:
+    except (LastAdminError, PasswordRequiredForAdminError) as exc:
         worker = worker_repository.get_worker(db, worker_id)
         return templates.TemplateResponse(
             request,
             "admin/user_edit.html",
-            {"t": TEXTS, "current_user": current_user, "worker": worker, "error": str(exc)},
+            {"t": TEXTS, "current_user": current_user, "worker": worker, "is_pin_locked": _is_pin_locked(worker), "error": str(exc)},
             status_code=400,
         )
     return RedirectResponse(url=f"/admin/users/{worker_id}/edit", status_code=303)
@@ -116,7 +138,7 @@ def deactivate_user(
         return templates.TemplateResponse(
             request,
             "admin/user_edit.html",
-            {"t": TEXTS, "current_user": current_user, "worker": worker, "error": str(exc)},
+            {"t": TEXTS, "current_user": current_user, "worker": worker, "is_pin_locked": _is_pin_locked(worker), "error": str(exc)},
             status_code=400,
         )
     return RedirectResponse(url=f"/admin/users/{worker_id}/edit", status_code=303)
@@ -133,4 +155,28 @@ def reset_password(
 ):
     verify_csrf(request, csrf_token)
     user_admin_service.set_password(db, worker_id, new_password)
+    return RedirectResponse(url=f"/admin/users/{worker_id}/edit", status_code=303)
+
+
+@router.post("/{worker_id}/pin")
+def reset_pin(
+    worker_id: int,
+    request: Request,
+    new_pin: str = Form(...),
+    confirm_pin: str = Form(...),
+    csrf_token: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: Worker = Depends(require_admin),
+):
+    verify_csrf(request, csrf_token)
+    try:
+        user_admin_service.reset_pin(db, worker_id, new_pin, confirm_pin)
+    except (InvalidPinFormatError, PinMismatchError) as exc:
+        worker = worker_repository.get_worker(db, worker_id)
+        return templates.TemplateResponse(
+            request,
+            "admin/user_edit.html",
+            {"t": TEXTS, "current_user": current_user, "worker": worker, "is_pin_locked": _is_pin_locked(worker), "error": str(exc)},
+            status_code=400,
+        )
     return RedirectResponse(url=f"/admin/users/{worker_id}/edit", status_code=303)
