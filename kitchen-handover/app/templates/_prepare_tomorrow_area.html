@@ -1,0 +1,16 @@
+<div id="prepare-area">
+{% if tomorrow_task %}
+    <div class="flash">
+        <strong>&check; {{ t.tomorrow_heading }}</strong>
+        <div>{{ status_message }}</div>
+    </div>
+{% else %}
+    <button class="big-button primary"
+            hx-post="/products/{{ product.id }}/prepare-tomorrow"
+            hx-headers='{"X-CSRF-Token": "{{ request.state.csrf_token }}"}'
+            hx-target="#prepare-area"
+            hx-swap="outerHTML">
+        {{ t.prepare_tomorrow_button }}
+    </button>
+{% endif %}
+</div>
