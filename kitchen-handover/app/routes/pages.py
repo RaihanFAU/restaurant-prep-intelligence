@@ -19,7 +19,11 @@ def home(request: Request, db: Session = Depends(get_db), current_user: Worker =
     service = PreparationTaskService(db)
     stations = station_repository.list_active_stations(db)
     station_rows = [
-        {"station": station, "active_count": len(service.get_station_tasks_today(station.id))}
+        {
+            "station": station,
+            "active_count": len(service.get_station_tasks_today(station.id)),
+            "tomorrow_count": len(service.get_station_tasks_tomorrow(station.id)),
+        }
         for station in stations
     ]
     return templates.TemplateResponse(
@@ -39,6 +43,7 @@ def station_page(
 
     service = PreparationTaskService(db)
     items = service.get_station_tasks_today(station_id)
+    tomorrow_items = service.get_station_tasks_tomorrow(station_id)
 
     sections = section_repository.list_sections_for_station(db, station_id)
     sections_with_products = [
@@ -55,6 +60,7 @@ def station_page(
             "station": station,
             "station_id": station.id,
             "items": items,
+            "tomorrow_items": tomorrow_items,
             "sections_with_products": sections_with_products,
             "direct_products": direct_products,
             "current_user": current_user,
@@ -70,8 +76,21 @@ def product_page(
     if product is None:
         raise ProductNotFoundError(product_id)
 
+    # The persistent "already marked for tomorrow" state must come from
+    # the database on every load — not just from a one-off success
+    # message right after the button was clicked — so it survives a
+    # reload, and shows up for a different worker opening the same page.
+    service = PreparationTaskService(db)
+    tomorrow_task = service.get_active_tomorrow_task(product_id)
+
     return templates.TemplateResponse(
         request,
         "product.html",
-        {"t": TEXTS, "product": product, "current_user": current_user},
+        {
+            "t": TEXTS,
+            "product": product,
+            "current_user": current_user,
+            "tomorrow_task": tomorrow_task,
+            "status_message": TEXTS["already_marked_message"] if tomorrow_task else None,
+        },
     )
