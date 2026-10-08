@@ -1,0 +1,8 @@
+<div class="task-item tomorrow">
+    <span>
+        <span class="priority-tag {{ 'priority-pinned' if item.task.is_pinned else 'priority-' ~ item.task.priority.value|lower }}">
+            {{ t.pinned_label if item.task.is_pinned else item.task.priority.value }}
+        </span>
+        <a href="/products/{{ item.task.product.id }}">{{ item.task.product.name_de }}</a>
+    </span>
+</div>
