@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %} · Login{% endblock %}
 {% block content %}
-<h1>{{ t.app_name }}</h1>
+<h1>{{ t.admin_login_heading }}</h1>
 
 {% if error %}
 <div class="error-banner">{{ error }}</div>
@@ -19,4 +19,6 @@
 
     <button class="big-button primary" type="submit">{{ t.login_button }}</button>
 </form>
+
+<p><a href="/worker-login">{{ t.worker_login_link_label }}</a></p>
 {% endblock %}
