@@ -1,0 +1,14 @@
+<div id="tomorrow-list-{{ station_id }}">
+    {% if flash_message %}
+    <div class="flash">{{ flash_message }}</div>
+    {% endif %}
+
+    {% if tomorrow_items %}
+    <div class="task-list-section">
+        <h2>{{ t.tomorrow_heading }}</h2>
+        {% for item in tomorrow_items %}
+            {% include "_tomorrow_task_row.html" %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
