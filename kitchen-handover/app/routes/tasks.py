@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import require_user
 from app.core.csrf import verify_csrf
 from app.core.i18n import TEXTS
+from app.core.operational_day import get_operational_date
 from app.db.session import get_db
 from app.models import Worker
 from app.schemas.preparation_task import CompleteTaskResponse, TaskOut
@@ -34,9 +35,19 @@ def complete_task(
     message = TEXTS["already_completed_message"] if result.already_completed else TEXTS["completed_message"]
 
     if request.headers.get("hx-request") == "true":
-        # Re-render the station's active task list so the completed item
-        # disappears without a full page reload.
+        # Re-render whichever list this task actually belonged to, so the
+        # completed item disappears without a full page reload. A task
+        # can be completed early, straight out of the tomorrow queue
+        # (PART 4/6) — in that case it's the tomorrow list that needs
+        # updating, not today's (which never contained it).
         station_id = result.task.product.station_id
+        if result.task.due_date > get_operational_date():
+            tomorrow_items = service.get_station_tasks_tomorrow(station_id)
+            return templates.TemplateResponse(
+                request,
+                "_tomorrow_task_list.html",
+                {"t": TEXTS, "station_id": station_id, "tomorrow_items": tomorrow_items, "flash_message": message},
+            )
         items = service.get_station_tasks_today(station_id)
         return templates.TemplateResponse(
             request,
