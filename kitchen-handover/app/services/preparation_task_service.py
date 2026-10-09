@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.enums import TaskPriority, TaskStatus
+from app.core.operational_day import get_operational_date
 from app.models import PreparationTask
 from app.repositories import (
     prepared_product_repository,
@@ -65,11 +66,13 @@ class PreparationTaskService:
     def prepare_tomorrow(self, product_id: int, worker_id: int, today: date | None = None) -> PrepareTomorrowResult:
         """Mark a product for preparation tomorrow.
 
-        today defaults to the real current date; tests pass it explicitly
-        so "tomorrow" is deterministic instead of depending on when the
-        test happens to run.
+        today defaults to the restaurant's current *operational* day
+        (app/core/operational_day.py), not literal calendar today — a
+        worker pressing this at 00:30 means "the upcoming morning", not
+        the one after. Tests pass today explicitly so this is
+        deterministic instead of depending on the real clock.
         """
-        today = today or date.today()
+        today = today or get_operational_date()
 
         product = prepared_product_repository.get_product(self.db, product_id)
         if product is None:
@@ -126,7 +129,7 @@ class PreparationTaskService:
         (see test_pinned_task_sorts_before_everything_else and friends) —
         change the sort key there too if this ordering ever changes.
         """
-        today = today or date.today()
+        today = today or get_operational_date()
 
         station = station_repository.get_station(self.db, station_id)
         if station is None:
@@ -154,7 +157,7 @@ class PreparationTaskService:
         and never requires waiting for midnight — it's a live DB query,
         correct the instant the task is created.
         """
-        today = today or date.today()
+        today = today or get_operational_date()
         tomorrow = today + timedelta(days=1)
 
         station = station_repository.get_station(self.db, station_id)
@@ -179,7 +182,7 @@ class PreparationTaskService:
         request, so it's correct after a reload or for a different
         worker opening the same page, not just right after the button
         was clicked."""
-        today = today or date.today()
+        today = today or get_operational_date()
         tomorrow = today + timedelta(days=1)
         return preparation_task_repository.find_active_task(self.db, product_id, tomorrow)
 
