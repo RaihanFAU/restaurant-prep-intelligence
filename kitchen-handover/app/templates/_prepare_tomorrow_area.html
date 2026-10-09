@@ -3,6 +3,7 @@
     <div class="flash">
         <strong>&check; {{ t.tomorrow_heading }}</strong>
         <div>{{ status_message }}</div>
+        <div class="due-note">{{ t.due_date_label }}: {{ tomorrow_task.due_date.strftime('%d.%m.%Y') }}</div>
     </div>
 {% else %}
     <button class="big-button primary"
