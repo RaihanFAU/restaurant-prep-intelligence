@@ -5,4 +5,11 @@
         </span>
         <a href="/products/{{ item.task.product.id }}">{{ item.task.product.name_de }}</a>
     </span>
+    <button class="done-button"
+            hx-post="/tasks/{{ item.task.id }}/complete"
+            hx-headers='{"X-CSRF-Token": "{{ request.state.csrf_token }}"}'
+            hx-target="#tomorrow-list-{{ station_id }}"
+            hx-swap="outerHTML">
+        {{ t.done_button }}
+    </button>
 </div>
