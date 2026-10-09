@@ -67,13 +67,14 @@ accounts — see "Creating accounts" below.
 
 ### Production configuration
 
-Two environment variables matter outside of local dev — set them in `.env`
+Three environment variables matter outside of local dev — set them in `.env`
 (or real environment variables in production), not in source code:
 
 | Variable | Default | Production value |
 |---|---|---|
 | `SESSION_SECRET_KEY` | an insecure, obviously-fake dev default | a long random value: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `COOKIE_SECURE` | `false` | `true` **once served over HTTPS** — leave `false` for local/LAN HTTP testing, or login cookies silently won't be set |
+| `OPERATIONAL_DAY_CUTOFF` | `04:00` | confirm with the actual kitchen — see "Operational (business) day" below |
 
 ## Creating accounts (no public registration)
 
@@ -182,6 +183,38 @@ flag. An admin can change either from `/admin/tasks`.
 Station task lists sort: **pinned first, then overdue before today's, then
 URGENT > HIGH > NORMAL, then alphabetically** as a final tiebreaker. Pinning
 always wins — a pinned `NORMAL` task outranks an unpinned `URGENT` one.
+
+## Operational (business) day
+
+The kitchen's working day doesn't reset at literal calendar midnight. A
+worker going home at 00:30 and remembering "Krautsalat needs to be ready
+for the morning" means the morning that's about to start, not the one
+after it — even though the calendar has already rolled over to a new
+date.
+
+To handle this, every scheduling decision (`PREPARE TOMORROW`,
+today/overdue, the tomorrow queue, home counters) resolves "today"
+through `get_operational_date()` in `app/core/operational_day.py`
+instead of literal calendar `date.today()`:
+
+- Before a configurable cutoff (**`OPERATIONAL_DAY_CUTOFF`, dev default
+  `04:00` Europe/Berlin — a placeholder, not confirmed restaurant
+  truth**), the operational date is still *yesterday's* calendar date.
+- `PREPARE TOMORROW` always targets `operational_date + 1`.
+
+Example: pressing `PREPARE TOMORROW` at **00:30** (cutoff `04:00`) still
+resolves to the previous operational day, so the task is due the very
+next morning — not the morning after. Pressing it at **23:30** the
+evening before works the same way it always did.
+
+**Early completion:** any active task — including one still sitting in
+the tomorrow queue — can be marked `FERTIG` the moment it's actually
+finished, regardless of its due date. `due_date` is never changed by
+completing early; only `completed_at`/`completed_by` are set, so the
+original due date stays intact for history. A task completed this way
+disappears from the tomorrow queue (and the home counter) immediately,
+and never reappears when its due date naturally arrives — it's the same
+database row, already `COMPLETED`.
 
 ## Manual test checklist
 
