@@ -4,15 +4,7 @@
 <h1>{{ station.name }}</h1>
 
 {% include "_task_list.html" %}
-
-{% if tomorrow_items %}
-<div class="task-list-section">
-    <h2>{{ t.tomorrow_heading }}</h2>
-    {% for item in tomorrow_items %}
-        {% include "_tomorrow_task_row.html" %}
-    {% endfor %}
-</div>
-{% endif %}
+{% include "_tomorrow_task_list.html" %}
 
 {% if sections_with_products %}
 <h2>{{ t.sections_heading }}</h2>
