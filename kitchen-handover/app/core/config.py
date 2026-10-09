@@ -1,3 +1,5 @@
+from datetime import time
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +30,14 @@ class Settings(BaseSettings):
     # wrong guesses get temporarily locked out (see auth_service.authenticate_pin).
     pin_max_failed_attempts: int = 5
     pin_lockout_seconds: int = 15 * 60
+
+    # --- operational (business) day ---
+    # NOT confirmed restaurant truth — a development placeholder until the
+    # actual overnight kitchen workflow is confirmed. Before this cutoff,
+    # the calendar has technically already rolled over to a new date but
+    # the kitchen's working day hasn't (see app/core/operational_day.py).
+    # Override via env var, e.g. OPERATIONAL_DAY_CUTOFF=03:30
+    operational_day_cutoff: time = time(4, 0)
 
 
 settings = Settings()
